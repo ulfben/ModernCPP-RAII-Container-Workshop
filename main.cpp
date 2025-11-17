@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <numeric>
 #include <initializer_list>
+#include <ranges>
+#include <compare>
 class Vec{
 	size_t _size = 0;
 	int* _data = nullptr;
@@ -36,7 +38,6 @@ public:
 		std::swap(_size, that._size);
 		return *this;
 	}
-
 	Vec& operator=(const Vec& that){ //copy assignment
 		auto* temp = new int[that._size];
 		std::copy(that.begin(), that.end(), temp);		
@@ -48,6 +49,18 @@ public:
 	
 	~Vec() noexcept{ delete[] _data; }
 	
+	bool operator==(const Vec& that) const noexcept{
+		if(size() != that.size()){ return false; }		
+		return std::equal(begin(), end(), that.begin());		
+	}
+
+	bool operator<(const Vec& that) const noexcept{
+		return std::lexicographical_compare(
+			begin(), end(),
+			that.begin(), that.end()
+		);
+	}
+
 	int* begin() noexcept { return _data; };
 	int* end() noexcept { return _data + _size; }
 	
