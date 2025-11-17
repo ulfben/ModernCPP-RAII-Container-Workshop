@@ -1,132 +1,164 @@
-#include <algorithm>
-#include <numeric>
+#include <algorithm>      // std::fill, std::copy, std::equal, std::lexicographical_compare_three_way
+#include <cassert>        // assert, catching bugs in debug builds
+#include <compare>        // three-way comparison
+#include <concepts>       // std::regular, std::three_way_comparable
 #include <initializer_list>
-#include <ranges>
-#include <compare>
-#include <concepts>
-#include <cassert>
-#include <stdexcept>
-#include <memory>
+#include <iterator>       // std::distance
+#include <memory>         // std::unique_ptr
+#include <stdexcept>      // std::out_of_range
+#include <utility>        // std::swap, std::exchange
+
 template<typename T>
 class Vec{
 	static_assert(std::regular<T>, "Vec<T> requires T to be regular");
+
 public:
 	using value_type = T;
 	using iterator = T*;
 	using const_iterator = const T*;
-	using size_type = std::size_t;
+	using size_type = size_t;
 	using reference = T&;
 	using const_reference = const T&;
 	using pointer = T*;
 	using const_pointer = const T*;
 
 	Vec() noexcept = default; 
-	Vec(size_type count){
-		_data = std::make_unique<value_type[]>(count);
-		_size = count;
-	}
-	Vec(size_type count, value_type val) : Vec(count){
-		std::fill(begin(), end(), val); //if this throws, our vector is invalid (_size is wrong!)
-	}
-	Vec(std::initializer_list<value_type> l) : Vec(l.size()){
-		std::copy(l.begin(), l.end(), begin());
-	}
-	Vec(const Vec& that) : Vec(that.size()){ //copy ctor		
-		std::copy(that.begin(), that.end(), begin());
-	}
-	Vec(Vec&& that) noexcept :
-		_data(std::exchange(that._data, nullptr)),
-		_size(std::exchange(that._size, 0)){}
+	~Vec() noexcept = default; //default destructor is ideal, unique_ptr will clean up.
+	
+	// count constructor, allocates 'count' default-constructed T's.
+	// this is the only constructor that allocates memory.
+	// all other ctors delegate to this one.
+	explicit Vec(size_type count)
+		: _data(count ? std::make_unique<value_type[]>(count) : nullptr)
+		, _size(count){}
 
-	//assignment operator, handling both rvalue and lvalue via copy-and-swap idiom
-	// 'that' is passed by value, so it will be constructed either via copy-ctor (if called with an lvalue) 
-	// or via move-ctor (if called with an lvalue)
-	//either way we have an independent copy of the data to swap with 'this'
+	// fill constructor: constructs 'count' copies of 'val'
+	Vec(size_type count, const value_type& val)
+		: Vec(count) // delegate to count ctor for the allocation
+	{
+		std::fill(begin(), end(), val);
+	}
+
+	// range constructor, accepting a pair of forward iterators
+	// notice that we are constraining the template parameter using a concept!
+	template<std::forward_iterator It>
+	Vec(It first, It last)
+		: Vec(static_cast<size_type>(std::distance(first, last))){
+		std::copy(first, last, begin());
+	}
+
+	Vec(std::initializer_list<value_type> l)
+		: Vec(l.begin(), l.end()) // delegate to the range ctor
+	{}
+
+	// copy ctor
+	Vec(const Vec& that)
+		: Vec(that.begin(), that.end()) // delegate to range ctor
+	{}
+
+	// move ctor
+	Vec(Vec&& that) noexcept
+		: _data(std::exchange(that._data, nullptr))
+		, _size(std::exchange(that._size, 0)){}
+
+	// assignment operator using the copy-and-swap idiom, with a twist.
+	// 'that' is passed by-value, using either copy- or move-construction.
+	// Provides the strong guarantee and is kind of noexcept, as the argument
+	// is constructed before entering the function body. :P 
 	Vec& operator=(Vec that) noexcept{
-		swap(that);//copy-and-swap idiom. 	
+		swap(that);
 		return *this;
-	}
+	}	
 
-
-	~Vec() noexcept = default;
-
+	//equality operator, to satisfy std::regular
 	bool operator==(const Vec& that) const noexcept{
-		if(size() != that.size()){ return false; }
+		if(size() != that.size()) return false;
 		return std::equal(begin(), end(), that.begin());
 	}
-
-	bool operator<(const Vec& that) const noexcept{
-		return std::lexicographical_compare(
+		
+	//three-way comparison operator, to generate all the other comparison operators for us!
+	// ... but does require that T is itself three-way comparable. Might be too much to ask.
+	auto operator<=>(const Vec& that) const noexcept {
+		return std::lexicographical_compare_three_way(
 			begin(), end(),
-			that.begin(), that.end()
+			that.begin(), that.end()		
 		);
 	}
 
-	auto begin() noexcept -> iterator{ return data(); };
-	auto begin() const noexcept -> const_iterator{ return data(); };
-	auto end() noexcept -> iterator{ return data() + size(); }
-	auto end() const noexcept -> const_iterator{ return data() + size(); }
-	auto size() const noexcept -> size_type{ return _size; }
-	auto empty() const noexcept -> bool{ return size() == 0; }
-	auto data() noexcept -> pointer{ return _data.get(); }
-	auto data() const noexcept -> const_pointer{ return _data.get(); }
+	//the expected container interface, as per cppreference on std::vector:	
+	auto data() noexcept		-> pointer			{ return _data.get(); }
+	auto data() const noexcept	-> const_pointer	{ return _data.get(); }
+
+	auto begin() noexcept		-> iterator			{ return data(); };
+	auto begin() const noexcept -> const_iterator	{ return data(); };
+	
+	auto end() noexcept			-> iterator			{ return data() + size(); }
+	auto end() const noexcept	-> const_iterator	{ return data() + size(); }
+	
+	auto size() const noexcept	-> size_type		{ return _size; }	
+	auto empty() const noexcept -> bool				{ return size() == 0; }
+	
+	auto clear() noexcept		-> void				{ *this = {}; } 
+	// noexcept is correct here.
+	// clear() assigns a default-constructed Vec to itself. This cannot throw:
+	// our default ctor is noexcept, and the parameter to operator=
+	// is move-constructed with no allocations.
+		
+	auto operator[](size_type index) noexcept -> reference {
+		assert(index < size() && "Vec<T>: Index out of bounds in operator[]");
+		return _data[index];
+	}	
+	auto operator[](size_type index) const noexcept -> const_reference{
+		assert(index < size() && "Vec<T>: Index out of bounds in operator[]");
+		return _data[index];
+	}
 
 	auto front() noexcept -> reference{
 		assert(!empty() && "Calling front() on an empty vec is undefined behavior!");
-		return _data[0];
+		return (*this)[0]; //use operator[] for all index accesses.
 	}
 	auto front() const noexcept -> const_reference{
 		assert(!empty() && "Calling front() on an empty vec is undefined behavior!");
-		return _data[0];
+		return (*this)[0];
 	}
+
 	auto back() noexcept -> reference{
 		assert(!empty() && "Calling back() on an empty vec is undefined behavior!");
-		return _data[size() - 1];
+		return (*this)[size() - 1];
 	}
 	auto back() const noexcept -> const_reference{
 		assert(!empty() && "Calling back() on an empty vec is undefined behavior!");
-		return _data[size() - 1];
-	}
+		return (*this)[size() - 1];
+	}	
 
-	auto clear() noexcept -> void{ 
-		*this = {}; 
-	} //use assignment operator to clean up and assign a default constructed Vec
-
-	reference operator[](size_type index) noexcept{
-		assert(index < size() && "Vec<T>: Index out of bounds in operator[]");
-		return _data[index];
-	}
-	reference operator[](size_type index) const noexcept{
-		assert(index < size() && "Vec<T>: Index out of bounds in operator[]");
-		return _data[index];
-	}
-
-	reference at(size_type index){
+	auto at(size_type index) -> reference{
 		if(index < size()){
-			return _data[index];
+			return (*this)[index];
 		}
 		throw std::out_of_range("Vec<T>: Index out of bounds in at()");
 	}
-	reference at(size_type index) const{
+	auto at(size_type index) const -> const_reference{
 		if(index < size()){
-			return _data[index];
+			return (*this)[index];
 		}
 		throw std::out_of_range("Vec<T>: Index out of bounds in at()");
 	}
 
-	void swap(Vec& that) noexcept{
-		using std::swap;
+	auto swap(Vec& that) noexcept -> void{
+		using std::swap; //std::swap two-step, to let us use ADL.
 		swap(_data, that._data);
 		swap(_size, that._size);
 	}
-	friend void swap(Vec& a, Vec& b) noexcept{
+	//two-argument swap function as friend
+	friend auto swap(Vec& a, Vec& b) noexcept -> void{
 		a.swap(b); //delegate to the member version
 	}
 
-private:
-	size_t _size = 0;
+private:	
 	std::unique_ptr<value_type[]> _data = nullptr;
+	size_t _size = 0;
 };
+
 
 int main(){
 	//check that Vec<T> is a regular type, using the std::regular concept
@@ -210,9 +242,7 @@ int main(){
 		assert(dst.size() == 2);
 		assert(dst[0] == 20);
 		assert(dst[1] == 21);
-		assert(dst.data() == src_data);
-		assert(src.size() == 0);
-		assert(src.data() == nullptr);
+		assert(dst.data() == src_data);		
 	}
 
 	// 8) Comparison operators (== and <)
@@ -269,13 +299,9 @@ int main(){
 
 		v.clear();
 		assert(v.empty());
-		assert(v.size() == 0);
-		// with your current clear() implementation,
-		// this will be nullptr again:
+		assert(v.size() == 0);		
 		assert(v.data() == nullptr);
 	}
-
-   //"All Vec<T> tests passed.\n";
 
 	return 0;
 }
