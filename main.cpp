@@ -3,27 +3,30 @@
 #include <initializer_list>
 #include <ranges>
 #include <compare>
+
+template<typename T>
 class Vec{
 	size_t _size = 0;
-	int* _data = nullptr;
+	T* _data = nullptr;
+
 public:	
 	Vec() noexcept : _size(0), _data(nullptr){}
 	
 	Vec(std::initializer_list<int> l){
-		_data = new int[l.size()];
+		_data = new T[l.size()];
 		_size = l.size();
 		std::copy(l.begin(), l.end(), begin());
 	}
 	
 	Vec(int count, int val = 0){
-		_data = new int[count];
+		_data = new T[count];
 		_size = count;				
 		std::fill(begin(), end(), val);
 		//std::iota(_data, _data+_size, 0);
 	}	
 	Vec(const Vec& that){ //copy ctor
 		if(that.empty()){ return; }
-		_data = new int[that._size];
+		_data = new T[that._size];
 		std::copy(that.begin(), that.end(), begin());
 		_size = that._size;
 	}
@@ -39,7 +42,7 @@ public:
 		return *this;
 	}
 	Vec& operator=(const Vec& that){ //copy assignment
-		auto* temp = new int[that._size];
+		auto* temp = new T[that._size];
 		std::copy(that.begin(), that.end(), temp);		
 		delete[] _data;
 		_data = temp;
@@ -75,21 +78,22 @@ public:
 		swap(_data, that._data);
 		swap(_size, that._size);		
 	}
+	friend void swap(Vec& a, Vec& b) noexcept{
+		a.swap(b); //delegate to the member version
+	}
 };
-void swap(Vec& a, Vec& b) noexcept{
-	a.swap(b); //delegate to the member version
-}
+
 
 
 int main(){
-	auto v = Vec(10, 5); //fill ctor
+	auto v = Vec<int>(10, 5); //fill ctor
 	auto v2(v); //copy ctor
 
-	auto v3 = Vec(3, 7);
+	auto v3 = Vec<int>(3, 7);
 	v2 = v3; //copy assignment
 
-	auto v4 = Vec{5,4,3,2,1}; //initializer list ctor
-	v4 = Vec(4, 9); //move assignment
+	auto v4 = Vec<int>{5,4,3,2,1}; //initializer list ctor
+	v4 = Vec<int>(4, 9); //move assignment
 	
 	v.swap(v4); //member swap
 	swap(v, v4); //non-member swap
