@@ -6,27 +6,33 @@
 
 template<typename T>
 class Vec{
-	size_t _size = 0;
-	T* _data = nullptr;
-
 public:	
+	using value_type = T;
+	using iterator = T*;
+	using const_iterator = const T*;
+	using size_type = std::size_t;
+	using reference = T&;
+	using const_reference = const T&;
+	using pointer = T*;
+	using const_pointer = const T*;
+
 	Vec() noexcept : _size(0), _data(nullptr){}
 	
-	Vec(std::initializer_list<int> l){
-		_data = new T[l.size()];
+	Vec(std::initializer_list<value_type> l){
+		_data = new value_type[l.size()];
 		_size = l.size();
 		std::copy(l.begin(), l.end(), begin());
 	}
 	
-	Vec(int count, int val = 0){
-		_data = new T[count];
+	Vec(size_type count, value_type val = {}){
+		_data = new value_type[count];
 		_size = count;				
 		std::fill(begin(), end(), val);
 		//std::iota(_data, _data+_size, 0);
 	}	
 	Vec(const Vec& that){ //copy ctor
 		if(that.empty()){ return; }
-		_data = new T[that._size];
+		_data = new value_type[that._size];
 		std::copy(that.begin(), that.end(), begin());
 		_size = that._size;
 	}
@@ -41,12 +47,10 @@ public:
 		std::swap(_size, that._size);
 		return *this;
 	}
-	Vec& operator=(const Vec& that){ //copy assignment
-		auto* temp = new T[that._size];
-		std::copy(that.begin(), that.end(), temp);		
-		delete[] _data;
-		_data = temp;
-		_size = that._size;
+
+	Vec& operator=(const Vec& that){ 
+		auto temp(that); //copy ctor
+		swap(temp);
 		return *this;
 	}
 	
@@ -64,13 +68,13 @@ public:
 		);
 	}
 
-	int* begin() noexcept { return _data; };
-	int* end() noexcept { return _data + _size; }
+	iterator begin() noexcept { return _data; };
+	iterator end() noexcept { return _data + _size; }
 	
-	int* begin() const noexcept { return _data; };
-	int* end() const noexcept { return _data + _size; }
+	const_iterator begin() const noexcept { return _data; };
+	const_iterator end() const noexcept { return _data + _size; }
 	
-	size_t size() const noexcept { return _size; }
+	size_type size() const noexcept { return _size; }
 	bool empty() const noexcept { return size() == 0; }
 
 	void swap(Vec& that) noexcept{
@@ -81,6 +85,9 @@ public:
 	friend void swap(Vec& a, Vec& b) noexcept{
 		a.swap(b); //delegate to the member version
 	}
+private:
+	size_t _size = 0;
+	pointer _data = nullptr;
 };
 
 
