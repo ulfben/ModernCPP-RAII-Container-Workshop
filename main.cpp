@@ -3,6 +3,7 @@
 #include <initializer_list>
 #include <ranges>
 #include <compare>
+#include <concepts>
 
 template<typename T>
 class Vec{
@@ -90,9 +91,10 @@ private:
 	pointer _data = nullptr;
 };
 
-
-
 int main(){
+	//check that Vec<T> is a regular type, using the std::regular concept
+	static_assert(std::regular<Vec<int>>, "Vec<T> should be regular");
+	
 	auto v = Vec<int>(10, 5); //fill ctor
 	auto v2(v); //copy ctor
 
