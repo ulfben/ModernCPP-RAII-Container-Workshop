@@ -4,10 +4,10 @@
 #include <ranges>
 #include <compare>
 #include <concepts>
-
+#include <cassert>
 template<typename T>
 class Vec{
-public:	
+public:
 	using value_type = T;
 	using iterator = T*;
 	using const_iterator = const T*;
@@ -18,30 +18,30 @@ public:
 	using const_pointer = const T*;
 
 	Vec() noexcept : _size(0), _data(nullptr){}
-	
+
 	Vec(std::initializer_list<value_type> l){
 		_data = new value_type[l.size()];
 		_size = l.size();
 		std::copy(l.begin(), l.end(), begin());
 	}
-	
+
 	Vec(size_type count, value_type val = {}){
 		_data = new value_type[count];
-		_size = count;				
+		_size = count;
 		std::fill(begin(), end(), val);
 		//std::iota(_data, _data+_size, 0);
-	}	
+	}
 	Vec(const Vec& that){ //copy ctor
 		if(that.empty()){ return; }
 		_data = new value_type[that._size];
 		std::copy(that.begin(), that.end(), begin());
 		_size = that._size;
 	}
-	Vec(Vec&& that) noexcept {		
-		_data = that._data;		
+	Vec(Vec&& that) noexcept{
+		_data = that._data;
 		_size = that._size;
 		that._data = nullptr;
-		that._size = 0;		
+		that._size = 0;
 	}
 	Vec& operator=(Vec&& that) noexcept{
 		std::swap(_data, that._data);
@@ -49,17 +49,17 @@ public:
 		return *this;
 	}
 
-	Vec& operator=(const Vec& that){ 
+	Vec& operator=(const Vec& that){
 		auto temp(that); //copy ctor
 		swap(temp);
 		return *this;
 	}
-	
+
 	~Vec() noexcept{ delete[] _data; }
-	
+
 	bool operator==(const Vec& that) const noexcept{
-		if(size() != that.size()){ return false; }		
-		return std::equal(begin(), end(), that.begin());		
+		if(size() != that.size()){ return false; }
+		return std::equal(begin(), end(), that.begin());
 	}
 
 	bool operator<(const Vec& that) const noexcept{
@@ -69,19 +69,45 @@ public:
 		);
 	}
 
-	iterator begin() noexcept { return _data; };
-	iterator end() noexcept { return _data + _size; }
-	
-	const_iterator begin() const noexcept { return _data; };
-	const_iterator end() const noexcept { return _data + _size; }
-	
-	size_type size() const noexcept { return _size; }
-	bool empty() const noexcept { return size() == 0; }
+	iterator begin() noexcept{ return _data; };
+	iterator end() noexcept{ return _data + _size; }
+
+	const_iterator begin() const noexcept{ return _data; };
+	const_iterator end() const noexcept{ return _data + _size; }
+
+	size_type size() const noexcept{ return _size; }
+	bool empty() const noexcept{ return size() == 0; }
+
+	pointer data() noexcept{ return _data; }
+	reference front() noexcept{
+		assert(!empty() && "Calling front() on an empty vec is undefined behavior!");
+		return _data[0];
+	}
+	reference back() noexcept{
+		assert(!empty() && "Calling back() on an empty vec is undefined behavior!");
+		return _data[size() - 1];
+	}
+
+	void clear() noexcept{
+		*this = Vec(); //use assignment operator to clean up and assign a default constructed Vec
+	}
+
+	reference operator[](size_type index) noexcept{
+		assert(index < size() && "Vec<T>: Index out of bounds in operator[]");
+		return _data[index];
+	}
+
+	reference at(size_type index){
+		if(index >= size()){
+			throw std::out_of_range("Vec<T>: Index out of bounds in at()");
+		}
+		return _data[index];
+	}
 
 	void swap(Vec& that) noexcept{
 		using std::swap;
 		swap(_data, that._data);
-		swap(_size, that._size);		
+		swap(_size, that._size);
 	}
 	friend void swap(Vec& a, Vec& b) noexcept{
 		a.swap(b); //delegate to the member version
@@ -94,7 +120,7 @@ private:
 int main(){
 	//check that Vec<T> is a regular type, using the std::regular concept
 	static_assert(std::regular<Vec<int>>, "Vec<T> should be regular");
-	
+
 	auto v = Vec<int>(10, 5); //fill ctor
 	auto v2(v); //copy ctor
 
@@ -103,7 +129,7 @@ int main(){
 
 	auto v4 = Vec<int>{5,4,3,2,1}; //initializer list ctor
 	v4 = Vec<int>(4, 9); //move assignment
-	
+
 	v.swap(v4); //member swap
 	swap(v, v4); //non-member swap
 
