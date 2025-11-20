@@ -8,6 +8,9 @@
 #include <stdexcept>      // std::out_of_range
 #include <utility>        // std::swap, std::exchange
 
+#pragma warning(push)
+#pragma warning(disable : 26446) // bounds.4 - subscript operator use
+
 template<typename T>
 class Vec{
 	static_assert(std::regular<T>, "Vec<T> requires T to be regular");
@@ -43,7 +46,8 @@ public:
 	// notice that we are constraining the template parameter using a concept!
 	template<std::forward_iterator It>
 	Vec(It first, It last)
-		: Vec(static_cast<size_type>(std::distance(first, last))){
+		: Vec(std::ranges::distance(first, last)){
+		[[gsl::suppress(stl.1, "copy destination is sized correctly by the delegating constructor")]]
 		std::copy(first, last, begin());
 	}
 
@@ -65,15 +69,21 @@ public:
 	// 'that' is passed by-value, using either copy- or move-construction.
 	// Provides the strong guarantee and is kind of noexcept, as the argument
 	// is constructed before entering the function body. :P 
-	Vec& operator=(Vec that) noexcept{
+	Vec& operator=(Vec&& that) noexcept{
 		swap(that);
 		return *this;
-	}	
+	}
+
+	Vec& operator=(const Vec& that){
+		auto temp(that);
+		swap(temp);
+		return *this;
+	}
 
 	//equality operator, to satisfy std::regular
 	bool operator==(const Vec& that) const noexcept{
 		if(size() != that.size()) return false;
-		return std::equal(begin(), end(), that.begin());
+		return std::ranges::equal(*this, that);
 	}
 		
 	//three-way comparison operator, to generate all the other comparison operators for us!
@@ -92,8 +102,8 @@ public:
 	auto begin() noexcept		-> iterator			{ return data(); };
 	auto begin() const noexcept -> const_iterator	{ return data(); };
 	
-	auto end() noexcept			-> iterator			{ return data() + size(); }
-	auto end() const noexcept	-> const_iterator	{ return data() + size(); }
+	auto end() noexcept			-> iterator			{ return std::next(data(), size()); }
+	auto end() const noexcept	-> const_iterator	{ return std::next(data(), size()); }
 	
 	auto size() const noexcept	-> size_type		{ return _size; }	
 	auto empty() const noexcept -> bool				{ return size() == 0; }
@@ -160,6 +170,8 @@ private:
 };
 
 
+#pragma warning(pop)
+
 int main(){
 	//check that Vec<T> is a regular type, using the std::regular concept
 	static_assert(std::regular<Vec<int>>, "Vec<T> should be regular");
@@ -172,8 +184,7 @@ int main(){
 		assert(v.data() == nullptr);
 
 		// range-for over empty
-		for(int x : v){
-			(void) x;
+		for([[maybe_unused]] const int x : v){			
 			assert(false && "Range-for over empty Vec should not execute body");
 		}
 	}
@@ -187,7 +198,7 @@ int main(){
 		assert(v.back() == 4);
 
 		int sum = 0;
-		for(int x : v){
+		for(const int x : v){
 			sum += x;
 		}
 		assert(sum == 1 + 2 + 3 + 4);
@@ -197,7 +208,7 @@ int main(){
 	{
 		Vec<int> v(5, 42);
 		assert(v.size() == 5);
-		bool all_42 = std::all_of(v.begin(), v.end(),
+		const bool all_42 = std::all_of(v.begin(), v.end(),
 			[](int x){ return x == 42; });
 		assert(all_42);
 	}
@@ -240,8 +251,8 @@ int main(){
 		auto* src_data = src.data();
 		dst = std::move(src);
 		assert(dst.size() == 2);
-		assert(dst[0] == 20);
-		assert(dst[1] == 21);
+		assert(dst.front() == 20);
+		assert(dst.back() == 21);
 		assert(dst.data() == src_data);		
 	}
 
@@ -279,13 +290,9 @@ int main(){
 	{
 		Vec<int> v{3, 1, 4, 1, 5};
 		std::sort(v.begin(), v.end());
-		// sorted: 1 1 3 4 5
+		Vec<int> sorted{1, 1, 3, 4, 5};
 		assert(v.size() == 5);
-		assert(v[0] == 1);
-		assert(v[1] == 1);
-		assert(v[2] == 3);
-		assert(v[3] == 4);
-		assert(v[4] == 5);
+		assert(v == sorted);
 
 		// friend swap + member swap
 		Vec<int> a{1, 2};
@@ -294,8 +301,8 @@ int main(){
 
 		assert(a.size() == 3);
 		assert(b.size() == 2);
-		assert(a[0] == 9 && a[1] == 8 && a[2] == 7);
-		assert(b[0] == 1 && b[1] == 2);
+		assert(a.front() == 9 && a.at(1) == 8 && a.back() == 7);
+		assert(b.front() == 1 && b.back() == 2);
 
 		v.clear();
 		assert(v.empty());
